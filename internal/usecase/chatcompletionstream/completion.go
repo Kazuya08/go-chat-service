@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/devfullcycle/fclx/chatservice/internal/domain/gateway"
+	"github.com/sashabaranov/go-openai"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -63,6 +64,41 @@ func (uc *ChatCompletionUseCase) Execute(ctx context.Context, input ChatCompleti
 		} else {
 			return nil, errors.New("error fetching existing chat: " + err.Error())
 		}
+	}
+	userMessage, err := entity.NewMessage("user", input.UserMessage, chat.Config.Model)
+	if err != nil {
+		return nil, errors.New("error creating user message: " + err.Error())
+	}
+	err = chat.AddMessage(userMessage)
+	if err != nil {
+		return nil, errors.New("error adding new message: " + err.Error())
+	}
+
+	messages := []openai.ChatCompletionMessage{}
+	for _, msg := range chat.Messages {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    msg.Role,
+			Content: msg.Content,
+		})
+	}
+
+	resp, err := uc.OpenAiClient.CreateChatCompletionStream(
+		ctx,
+		openai.ChatCompletionRequest{
+
+			Model:            chat.Config.Model.Name,
+			Messages:         messages,
+			MaxTokens:        chat.Config.MaxTokens,
+			Temperature:      chat.Config.Temperature,
+			TopP:             chat.Config.TopP,
+			PresencePenalty:  chat.Config.PresencePenalty,
+			FrequencyPenalty: chat.Config.FrequencyPenalty,
+			Stop:             chat.Config.Stop,
+			Stream:           true,
+		},
+	)
+	if err != nil {
+		return nil, errors.New("error creating chat completion: " + err.Error())
 	}
 }
 
